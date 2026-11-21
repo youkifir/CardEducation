@@ -121,7 +121,7 @@ const $ = s => document.querySelector(s);
 function showErr(m) {
   let b = $('#err');
   if (!b) { b = document.createElement('div'); b.id = 'err'; b.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:99;background:#E8435F;color:#fff;padding:10px 12px;border-radius:12px;font-size:13px;word-break:break-word'; b.onclick = () => b.remove(); document.body.append(b); }
-  b.textContent = 'v3 · ' + m;
+  b.textContent = 'v4 · ' + m;
 }
 addEventListener('error', e => showErr(e.message + ' (стр. ' + (e.lineno || '?') + ')'));
 addEventListener('unhandledrejection', e => showErr(String(e.reason)));
@@ -218,7 +218,7 @@ function statHTML() {
   return `<div class="boxes">${[1, 2, 3, 4, 5].map(n => `<div class="${cb === n ? 'on' : ''}"><b>${U.filter(u => u.c[u.dir].b === n).length}</b>коробка ${n}</div>`).join('')}</div>
   <p class="sub">К повторению сейчас: ${dueUnits().length}</p>`;
 }
-function head() {
+function studyHead() {
   return `<div class="seg modes">${[['f', 'EN → RU'], ['r', 'RU → EN'], ['mix', 'Микс']].map(([m, t]) => `<button data-mode="${m}" aria-pressed="${mode === m}">${t}</button>`).join('')}</div><div id="stat">${statHTML()}</div>`;
 }
 function bindHead() {
@@ -232,7 +232,7 @@ function renderStudy() {
   if (!cards.length) return emptyState();
   if (!cur) { cur = pick(); tries = 0; hintOn = false; }
   if (!cur) {
-    $('#view').innerHTML = head() + `<div class="empty"><h2>На сегодня всё</h2><p>Следующее повторение ${nextIn()}. Регулярность важнее длины занятия.</p>
+    $('#view').innerHTML = studyHead() + `<div class="empty"><h2>На сегодня всё</h2><p>Следующее повторение ${nextIn()}. Регулярность важнее длины занятия.</p>
       <button class="btn" id="more">Повторить всё равно</button></div>`;
     bindHead(); $('#more').onclick = () => { extra = true; renderStudy(); }; return;
   }
@@ -242,7 +242,7 @@ function renderStudy() {
     : `<p class="cap">Переведи на английский</p><h2 class="word">${esc(c.ru)}</h2><p class="hint" id="hint"></p>`;
   const back = fw ? `<p class="cap">Перевод</p><h2 class="word">${esc(c.ru)}</h2><p class="en">${esc(c.en)}</p>`
     : `<p class="cap">Перевод</p><h2 class="word">${esc(c.en)}</h2>${ipa}${spk}<p class="en">${esc(c.ru)}</p>`;
-  $('#view').innerHTML = head() + `
+  $('#view').innerHTML = studyHead() + `
     <div class="scene"><div class="card" id="card"><div class="face front">${front}</div>
       <div class="face back">${back}${c.ex ? `<p class="ex">${esc(c.ex)}</p>` : ''}</div></div></div>
     <div class="controls" id="ctl">
@@ -309,7 +309,7 @@ function renderWords() {
   const list = [...cards].sort((a, b) => b.t - a.t).map(c => `
     <button class="item" data-id="${c.id}"><div><b>${esc(c.en)} <span>${esc(c.ipa || '')}</span></b><span>${esc(c.ru)}</span></div>
     <div class="dots" title="Коробка Лейтнера">${[1, 2, 3, 4, 5].map(n => `<i class="${Math.min(c.f.b, c.r.b) >= n ? 'on' : ''}"></i>`).join('')}</div></button>`).join('');
-  $('#view').innerHTML = `<div class="top"><h1>Слова · ${cards.length}</h1><button class="add" id="add">Добавить</button></div>${list}<button class="link" id="clear" style="display:block;margin:14px auto 0">Удалить все слова</button><p class="sub">Flipword v3</p>`;
+  $('#view').innerHTML = `<div class="top"><h1>Слова · ${cards.length}</h1><button class="add" id="add">Добавить</button></div>${list}<button class="link" id="clear" style="display:block;margin:14px auto 0">Удалить все слова</button><p class="sub">Flipword v4</p>`;
   $('#add').onclick = () => openSheet();
   $('#clear').onclick = () => {
     const go = ok => { if (!ok) return; if (cs) cs.removeItems(cards.map(c => 'c_' + c.id)); cards = []; local(); cur = null; render(); };
