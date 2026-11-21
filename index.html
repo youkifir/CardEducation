@@ -118,6 +118,13 @@ try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwi
   const c = scheme === 'dark' ? '#0F1020' : '#EEF0FA'; tg.setHeaderColor(c); tg.setBackgroundColor(c); } catch (e) {}
 
 const $ = s => document.querySelector(s);
+function showErr(m) {
+  let b = $('#err');
+  if (!b) { b = document.createElement('div'); b.id = 'err'; b.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:99;background:#E8435F;color:#fff;padding:10px 12px;border-radius:12px;font-size:13px;word-break:break-word'; b.onclick = () => b.remove(); document.body.append(b); }
+  b.textContent = 'v3 · ' + m;
+}
+addEventListener('error', e => showErr(e.message + ' (стр. ' + (e.lineno || '?') + ')'));
+addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 const FINE = matchMedia('(pointer:fine)').matches; // на телефоне не открываем клавиатуру автоматически
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const norm = s => s.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -143,14 +150,6 @@ const store = {
   save: c => cs ? cs.setItem('c_' + c.id, JSON.stringify(c)) : local(),
   remove: id => cs ? cs.removeItem('c_' + id) : local()
 };
-
-const STARTER = [
-  ['apple','яблоко','I eat an apple every day.'],['book','книга','This book is very interesting.'],
-  ['house','дом','They bought a new house.'],['water','вода','Can I have a glass of water?'],
-  ['friend','друг, подруга','She is my best friend.'],['to learn','учить, учиться','I want to learn English.'],
-  ['beautiful','красивый','What a beautiful day!'],['to work','работать','He works at a bank.'],
-  ['street','улица','The street is empty.'],['always','всегда','She is always late.']
-];
 
 /* ---------- метод Лейтнера: 5 коробок, интервалы в днях ---------- */
 const DAYS = [0, 1, 3, 7, 14];
@@ -210,10 +209,9 @@ function render() {
   tab === 'study' ? renderStudy() : renderWords();
 }
 function emptyState() {
-  $('#view').innerHTML = `<div class="empty"><h2>Пока нет карточек</h2><p>Добавь свои слова или начни со стартового набора из 10 слов.</p>
-  <button class="btn acc" id="seed">Добавить стартовый набор</button><button class="btn" id="own">Создать свою карточку</button></div>`;
-  $('#seed').onclick = () => { STARTER.forEach(([en, ru, ex]) => addCard(en, ru, ex)); render(); };
-  $('#own').onclick = () => openSheet();
+  $('#view').innerHTML = `<div class="empty"><h2>Пока нет карточек</h2><p>Создай первую карточку или добавь сразу много слов списком.</p>
+  <button class="btn acc" id="own">Создать карточку</button><button class="btn" id="bulk">Добавить списком</button></div>`;
+  $('#own').onclick = () => openSheet(); $('#bulk').onclick = () => openSheet(null, 'many');
 }
 function statHTML() {
   const U = units(), cb = cur && cur.c[cur.dir].b;
@@ -311,8 +309,12 @@ function renderWords() {
   const list = [...cards].sort((a, b) => b.t - a.t).map(c => `
     <button class="item" data-id="${c.id}"><div><b>${esc(c.en)} <span>${esc(c.ipa || '')}</span></b><span>${esc(c.ru)}</span></div>
     <div class="dots" title="Коробка Лейтнера">${[1, 2, 3, 4, 5].map(n => `<i class="${Math.min(c.f.b, c.r.b) >= n ? 'on' : ''}"></i>`).join('')}</div></button>`).join('');
-  $('#view').innerHTML = `<div class="top"><h1>Слова · ${cards.length}</h1><button class="add" id="add">Добавить</button></div>${list}`;
+  $('#view').innerHTML = `<div class="top"><h1>Слова · ${cards.length}</h1><button class="add" id="add">Добавить</button></div>${list}<button class="link" id="clear" style="display:block;margin:14px auto 0">Удалить все слова</button><p class="sub">Flipword v3</p>`;
   $('#add').onclick = () => openSheet();
+  $('#clear').onclick = () => {
+    const go = ok => { if (!ok) return; if (cs) cs.removeItems(cards.map(c => 'c_' + c.id)); cards = []; local(); cur = null; render(); };
+    tg && tg.showConfirm && inTg ? tg.showConfirm('Удалить все карточки?', go) : go(confirm('Удалить все карточки?'));
+  };
   document.querySelectorAll('.item').forEach(b => b.onclick = () => openSheet(cards.find(c => c.id === b.dataset.id)));
 }
 
@@ -323,8 +325,8 @@ function addCard(en, ru, ex) {
 }
 function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.append(el); setTimeout(() => el.remove(), 1800); }
 
-function openSheet(card) {
-  let m = 'one';
+function openSheet(card, m0) {
+  let m = m0 || 'one';
   const el = document.createElement('div'); el.className = 'wrap';
   const draw = () => {
     el.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">
@@ -368,7 +370,11 @@ function openSheet(card) {
 $('#t-study').onclick = () => { tab = 'study'; render(); };
 $('#t-words').onclick = () => { tab = 'words'; render(); };
 try { speechSynthesis.getVoices(); } catch (e) {}
-store.load().then(c => { cards = c.map(migrate); render(); });
+let loaded = false;
+const boot = c => { if (loaded) return; loaded = true; cards = c.map(migrate); render(); };
+$('#view').innerHTML = '<p class="sub" style="margin:auto">Загрузка…</p>';
+store.load().then(boot, () => boot([]));
+setTimeout(() => { try { boot(JSON.parse(localStorage.getItem('fw_cards') || '[]')); } catch (e) { boot([]); } }, 3000);
 </script>
 </body>
 </html>
