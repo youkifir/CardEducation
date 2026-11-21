@@ -100,6 +100,14 @@ button{touch-action:manipulation}
 main{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .card{-webkit-transform-style:preserve-3d}
 .back{pointer-events:none}.card.flip .back{pointer-events:auto}.card.flip .front{pointer-events:none}
+.item{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.item.sel{border-color:var(--acc)}
+.chk{width:22px;height:22px;border-radius:50%;border:2px solid var(--mute);flex:none;display:grid;place-items:center}
+.chk.on{background:var(--acc);border-color:var(--acc)}
+.chk.on::after{content:'✓';color:#fff;font-size:13px;font-weight:700}
+.selbar{position:sticky;bottom:-24px;margin:12px -20px -24px;padding:12px 20px;background:var(--bg);border-top:1px solid var(--line);display:flex;gap:10px}
+.btn.del{background:var(--bad);color:#fff}
+.btn:disabled{opacity:.4}
 </style>
 </head>
 <body>
@@ -121,7 +129,7 @@ const $ = s => document.querySelector(s);
 function showErr(m) {
   let b = $('#err');
   if (!b) { b = document.createElement('div'); b.id = 'err'; b.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:99;background:#E8435F;color:#fff;padding:10px 12px;border-radius:12px;font-size:13px;word-break:break-word'; b.onclick = () => b.remove(); document.body.append(b); }
-  b.textContent = 'v4 · ' + m;
+  b.textContent = 'v5 · ' + m;
 }
 addEventListener('error', e => showErr(e.message + ' (стр. ' + (e.lineno || '?') + ')'));
 addEventListener('unhandledrejection', e => showErr(String(e.reason)));
@@ -304,18 +312,53 @@ function next() {
   setTimeout(renderStudy, 250);
 }
 
-function renderWords() {
-  if (!cards.length) return emptyState();
-  const list = [...cards].sort((a, b) => b.t - a.t).map(c => `
-    <button class="item" data-id="${c.id}"><div><b>${esc(c.en)} <span>${esc(c.ipa || '')}</span></b><span>${esc(c.ru)}</span></div>
-    <div class="dots" title="Коробка Лейтнера">${[1, 2, 3, 4, 5].map(n => `<i class="${Math.min(c.f.b, c.r.b) >= n ? 'on' : ''}"></i>`).join('')}</div></button>`).join('');
-  $('#view').innerHTML = `<div class="top"><h1>Слова · ${cards.length}</h1><button class="add" id="add">Добавить</button></div>${list}<button class="link" id="clear" style="display:block;margin:14px auto 0">Удалить все слова</button><p class="sub">Flipword v4</p>`;
-  $('#add').onclick = () => openSheet();
-  $('#clear').onclick = () => {
-    const go = ok => { if (!ok) return; if (cs) cs.removeItems(cards.map(c => 'c_' + c.id)); cards = []; local(); cur = null; render(); };
-    tg && tg.showConfirm && inTg ? tg.showConfirm('Удалить все карточки?', go) : go(confirm('Удалить все карточки?'));
+let sel = null, longp = false;
+function delCards(list) {
+  const go = ok => {
+    if (!ok) return;
+    if (cs) cs.removeItems(list.map(c => 'c_' + c.id));
+    cards = cards.filter(c => !list.includes(c)); local(); sel = null; cur = null; render();
   };
-  document.querySelectorAll('.item').forEach(b => b.onclick = () => openSheet(cards.find(c => c.id === b.dataset.id)));
+  const t = list.length === cards.length ? 'Удалить все карточки (' + list.length + ')?' : 'Удалить выбранные карточки (' + list.length + ')?';
+  tg && tg.showConfirm && inTg ? tg.showConfirm(t, go) : go(confirm(t));
+}
+function renderWords() {
+  if (!cards.length) { sel = null; return emptyState(); }
+  const y = $('#view').scrollTop;
+  const list = [...cards].sort((a, b) => b.t - a.t).map(c => `
+    <button class="item${sel && sel.has(c.id) ? ' sel' : ''}" data-id="${c.id}">
+      ${sel ? `<i class="chk${sel.has(c.id) ? ' on' : ''}"></i>` : ''}
+      <div><b>${esc(c.en)} <span>${esc(c.ipa || '')}</span></b><span>${esc(c.ru)}</span></div>
+      <div class="dots" title="Коробка Лейтнера">${[1, 2, 3, 4, 5].map(n => `<i class="${Math.min(c.f.b, c.r.b) >= n ? 'on' : ''}"></i>`).join('')}</div></button>`).join('');
+  const top = sel
+    ? `<div class="top"><h1>Выбрано: ${sel.size}</h1><button class="link" id="all">${sel.size === cards.length ? 'Снять все' : 'Выбрать все'}</button></div>`
+    : `<div class="top"><h1>Слова · ${cards.length}</h1><div style="display:flex;gap:8px;align-items:center"><button class="link" id="pick">Выбрать</button><button class="add" id="add">Добавить</button></div></div>`;
+  const foot = sel
+    ? `<div class="selbar"><button class="btn" id="cancelSel">Отмена</button><button class="btn del" id="delSel" ${sel.size ? '' : 'disabled'}>Удалить (${sel.size})</button></div>`
+    : `<button class="link" id="clear" style="display:block;margin:14px auto 0">Удалить все слова</button><p class="sub">Flipword v5 · зажми слово, чтобы выбрать несколько</p>`;
+  $('#view').innerHTML = top + list + foot;
+  $('#view').scrollTop = y;
+  if (sel) {
+    $('#all').onclick = () => { sel = sel.size === cards.length ? new Set() : new Set(cards.map(c => c.id)); renderWords(); };
+    $('#cancelSel').onclick = () => { sel = null; renderWords(); };
+    $('#delSel').onclick = () => delCards(cards.filter(c => sel.has(c.id)));
+  } else {
+    $('#add').onclick = () => openSheet();
+    $('#pick').onclick = () => { sel = new Set(); renderWords(); };
+    $('#clear').onclick = () => delCards([...cards]);
+  }
+  document.querySelectorAll('.item').forEach(b => {
+    let t;
+    const stop = () => clearTimeout(t);
+    b.onpointerdown = () => { longp = false; if (!sel) t = setTimeout(() => { longp = true; sel = new Set([b.dataset.id]); try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {} renderWords(); }, 450); };
+    b.onpointerup = b.onpointerleave = b.onpointercancel = stop;
+    b.oncontextmenu = e => e.preventDefault();
+    b.onclick = () => {
+      if (longp) { longp = false; return; }
+      if (sel) { sel.has(b.dataset.id) ? sel.delete(b.dataset.id) : sel.add(b.dataset.id); renderWords(); }
+      else openSheet(cards.find(c => c.id === b.dataset.id));
+    };
+  });
 }
 
 /* ---------- добавление / редактирование ---------- */
@@ -367,8 +410,8 @@ function openSheet(card, m0) {
   draw(); document.body.append(el);
 }
 
-$('#t-study').onclick = () => { tab = 'study'; render(); };
-$('#t-words').onclick = () => { tab = 'words'; render(); };
+$('#t-study').onclick = () => { tab = 'study'; sel = null; render(); };
+$('#t-words').onclick = () => { tab = 'words'; sel = null; render(); };
 try { speechSynthesis.getVoices(); } catch (e) {}
 let loaded = false;
 const boot = c => { if (loaded) return; loaded = true; cards = c.map(migrate); render(); };
