@@ -3,6 +3,10 @@ const plural = n => { const a = n % 10, b = n % 100; return b > 10 && b < 20 ? '
 
 module.exports = async (req, res) => {
   if (process.env.CRON_SECRET && req.headers.authorization !== 'Bearer ' + process.env.CRON_SECRET) return res.status(401).end();
+  const miss = ['BOT_TOKEN', 'APP_URL'].filter(k => !process.env[k]);
+  if (!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) || !(process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN)) miss.push('REDIS_URL/TOKEN (база не подключена)');
+  if (miss.length) return res.status(500).json({ error: 'Не заданы переменные', missing: miss });
+  try {
   const ids = (await redis('SMEMBERS', 'users')) || [];
   const nowH = Math.floor(Date.now() / 36e5), today = new Date().toISOString().slice(0, 10);
   let sent = 0;
@@ -22,4 +26,7 @@ module.exports = async (req, res) => {
     else if (r.error_code === 403) await redis('SREM', 'users', String(id)); // пользователь заблокировал бота
   }
   res.json({ sent, users: ids.length });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
 };
